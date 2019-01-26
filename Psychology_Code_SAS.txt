@@ -1,0 +1,385 @@
+SAS CODE for PSYCHOLOGY RESEARCH:
+
+*************************** CHANGE CODE BETWEEN STARS *****************;
+
+%Let libn = roc;                     * to libname;
+
+%let anyd = anycd;              *variable trying to model;
+
+%let var1 = apsdptot;          *first variable to compare;
+
+%let var2 = text;                   *second variable to compare;
+
+%let gendervar = cgender;
+
+%let racevar = crace;
+
+%let agevar = age_yrs;
+
+*************************************************************************;
+
+ods pdf file=”/folders/myfolders/ROC_PARTY/ROC_Program_CD_tidy.pdf” startpage=no style=journal; ods noproctitle;
+
+*** This makes a new data set that is “TIDY” and only includes observations with complete information on your variables of interest;
+
+data &libn..CD_only;
+
+set &libn..abacab;
+
+where &agevar.>=6;
+
+if &var1.=. or &var2.=. or &anyd.=. then delete;
+
+run;
+
+*** Table of Summary Stats of children’s age with and without CD***;
+
+Title1 “Table 1. Age Statistics based on Conduct Disorder Diagnosis” font=”roman”;
+
+proc tabulate data=&libn..cd_only ;
+
+var &agevar.;
+
+class &anyd.;
+
+table &anyd.=’ ‘, &agevar.=’ ‘*(mean=”Average Age” min=”Minimum” max=”Maximum”);
+
+Format &gendervar. sex. &anyd. cd.;
+
+run;
+
+*** Gets the mean, min, and max on the age of children grouped by race;
+
+Proc means data = other maxdec=1 mean min max ;
+
+var &agevar.;
+
+class &racevar.;
+
+where &var1.^=. and &var2.^=. and &racevar.^=.;
+
+format &racevar. racing.;
+
+run;
+
+** table of APSD and CBCL score summary variables;
+
+Title1 “Table 2. APSD and CBCL Scores for Conduct Disorder Diagnosis by Sex with Tidy Data” font=”roman”;
+
+proc tabulate data=&libn..cd_only missing;
+
+class    &anyd. &gendervar.  ;
+
+var      &var1. &var2.;
+
+table   &anyd.=’ ‘*(&gendervar.=’ ‘ all=”Total”)*{style={cellwidth = 0.7in cellheight = 0.3in}},
+
+&var1.=”APSD”*(n mean=”Mean Score”
+
+std=”Standard Deviation”)*{style={cellwidth = 0.7in }}
+
+&var2.=”CBCL”*(n mean=”Mean Score”
+
+std=”Standard Deviation”)*{style={cellwidth = 0.7in}}
+
+PCTN=”Diagnostic % based on Sex”*{style={cellwidth =  0.8in}};
+
+Format            &gendervar. sex. &anyd. cd.;
+
+run;
+
+Title1 “Table 3. APSD and CBCL Basic Statistics” font=”roman”;
+
+proc tabulate data=&libn..cd_only;
+
+class    &anyd.  ;
+
+var      &var1. &var2.;
+
+table   &anyd.=’ ‘*{style={cellwidth = 0.7in cellheight = 0.3in}} all=”Total”,
+
+&var1.=”APSD”*(n mean=”Mean Score”
+
+std=”Standard Deviation” min=”Minimum Score” max=”Maximum Score”)*{style={cellwidth = 0.7in }}
+
+&var2.=”CBCL”*(n mean=”Mean Score”
+
+std=”Standard Deviation” min=”Minimum Score” max=”Maximum Score”)*{style={cellwidth = 0.7in}}
+
+PCTN=”Diagnostic %”*{style={cellwidth =  0.8in}};
+
+where             &var1. ^=. and &var2. ^= . ;
+
+Format  &anyd. cd.;
+
+run;
+
+***** Histogram of ages based on CD diagnosis***;
+
+Title1 “Figure 1. Distribution of Ages based on CD Diagnosis” font=”roman”;
+
+proc sgplot data=&libn..cd_only;
+
+where             &agevar. ^=. and &anyd.^=.;;
+
+histogram &agevar. / group=&anyd. transparency=0.5 ;
+
+density &agevar. / type=kernel group=&anyd. lineattrs=(pattern=solid ) ;
+
+label &anyd. = “Diagnosis”;
+
+format &anyd. cd.;
+
+run;
+
+title1;
+
+******************** ROC curve and analysis for CD************************;
+
+***** This singular code below gives you everything you need, but it does not allow you to modify the lines / shade area under curve, etc.  Use this if you just want to look at your data, use the code below this if you want to edit output and care about display! 🙂 ;
+
+proc logistic data = &libn..cd_only plots(only) = roc  ;
+
+model &anyd.= &var1. &var2. / rsquare nofit ctable influence lackfit noint;
+
+roc ‘APSD’ &var1. ;
+
+roc ‘Externalizing T Score’ &var2.;
+
+roccontrast reference(‘APSD’) / estimate e;
+
+ods output rocassociation = roc_table;   *this makes an output of your graph in a temporary work folder;
+
+run;
+
+**************** This looks at incremental validity via logistic regression;
+
+proc logistic data=&libn..abacab plots=none;
+
+model &anyd.(event=”1″) = &var1. / outroc=aroc;
+
+run;
+
+proc logistic data=&libn..abacab plots=none;
+
+model &anyd.(event=”1″) = &var2. / outroc=troc;
+
+run;
+
+proc logistic data=&libn..abacab plots=none;
+
+model &anyd.(event=”1″) = &var2. &var1. / outroc=troc_2;
+
+run;
+
+proc logistic data=&libn..abacab plots=none;
+
+model &anyd.(event=”1″) = &var1. / outroc=aroc_2;
+
+run;
+
+proc logistic data=&libn..abacab plots=none;
+
+model &anyd.(event=”1″) = &var1. &var2. / outroc=bothroc_3;
+
+run;
+
+proc logistic data=&libn..abacab plots=roc;
+
+model &anyd.(event=”1″) = tdelin &var2. / noint;
+
+run;
+
+***************************************************************************;
+
+** Below is code to make the ROC plots from scratch so that you can edit the display more;
+
+data new_troc;
+
+set troc;
+
+rename           _1MSPEC_ = _1MSPEC_t
+
+_FALNEG_ = _FALNEG_t
+
+_FALPOS_ = _FALPOS_t
+
+_NEG_    = _NEG_t
+
+_POS_    = _POS_t
+
+_PROB_   = _PROB_t
+
+_SENSIT_ = _SENSIT_t;
+
+run;
+
+data new_aroc;
+
+set aroc;
+
+rename           _1MSPEC_ = _1MSPEC_a
+
+_FALNEG_ = _FALNEG_a
+
+_FALPOS_ = _FALPOS_a
+
+_NEG_    = _NEG_a
+
+_POS_    = _POS_a
+
+_PROB_   = _PROB_a
+
+_SENSIT_ = _SENSIT_a;
+
+run;
+
+data a_t_rocs;
+
+merge new_aroc new_troc;
+
+run;
+
+ods graphics / reset attrpriority=none;
+
+****************** This changes how your ROC curves are displayed *************;
+
+proc sgplot data=a_t_rocs noautolegend aspect=1;
+
+xaxis values=(0 to 1 by 0.25) grid offsetmin=.05 offsetmax=.05 ;
+
+yaxis values=(0 to 1 by 0.25) grid offsetmin=.05 offsetmax=.05 label= “Sensitivity”;
+
+lineparm x=0 y=0 slope=1 / transparency=.7 legendlabel=”No Discrimination”;
+
+series x=_1mspec_t y=_sensit_t / lineattrs=(thickness=3 color=purple) ;
+
+series x=_1mspec_a y=_sensit_a / lineattrs=(thickness=3 color=coral);
+
+styleattrs datalinepatterns=(solid) ;
+
+keylegend / location=outside Title=” ” across=1;
+
+Title1 “Figure 2. Comparing CBCL and APSD Diagnostic Accuracy for Conduct Disorder” font=”roman”;
+
+title2 ” “; *just add another space to make it less clustered;
+
+Label _sensit_t = “CBCL   Area = 0.751” _sensit_a = “APSD     Area = 0.794”;
+
+run;
+
+title1; title2;
+
+***** Make Table of Results from Above Analysis *****;
+
+data &libn..results;
+
+input Device $ Area STD Concordance Discordance AIC  p_value;
+
+datalines;
+
+APSD 0.794 0.024  78.3  18.8  608 0.042
+
+CBCL 0.751 0.027  73.7  23.5  575 0.042
+
+;
+
+run;
+
+title1 “Table 4. Results from ROC Analysis” font=”roman”;
+
+proc print data=&libn..results noobs label;
+
+label p_value = “P Value”;
+
+run;
+
+Title1 “Figure 2. Comparative Histograms of APSD Scores” font=”roman”;
+
+***** comparative histograms *** ;
+
+proc sgplot data = &libn..abacab;
+
+title ‘Distribution of APSD Scores’ font=”roman”;
+
+histogram  &var1. / group=&anyd. scale=count binstart=0 binwidth=3 transparency=0.5 datalabel=count ;
+
+where &var1.^=. and &anyd.^=.;
+
+yaxis grid;  xaxis grid;
+
+keylegend / location=inside position=topleft across=1;
+
+format &anyd. cd.;
+
+label &anyd. = “Diagnosis” &var1.= “APSD Score”;
+
+run;
+
+Title1 “Figure 2. APSD Scores by Race for Children with CD” font=”roman”;
+
+proc sgplot data = &libn..abacab;
+
+title ‘APSD Scores by Race for Children with CD’;
+
+histogram  &var1. / group=&racevar. scale=count binstart=0 binwidth=3 transparency=0.5 /*datalabel=count*/;
+
+where &var1.^=. and &anyd.^=1 and &racevar.^=.;
+
+yaxis grid;  xaxis grid;
+
+keylegend / location=inside position=topleft across=1;
+
+format &anyd. cd. &racevar. race.;
+
+label &anyd. = “Diagnosis” &var1.= “APSD Score”;
+
+run;
+
+Title1 “Figure 2. APSD Scores by Race for Children without CD” font=”roman”;
+
+***** comparative histograms *** ;
+
+proc sgplot data = &libn..abacab;
+
+title ‘APSD Scores by Race for Children without CD’;
+
+histogram  &var1. / group=&racevar. scale=count binstart=0 binwidth=3 transparency=0.5 /*datalabel=count*/;
+
+where &var1.^=. and &anyd.^=0 and &racevar.^=.;
+
+yaxis grid;  xaxis grid;
+
+keylegend / location=inside position=topleft across=1;
+
+format &anyd. cd. &racevar. race.;
+
+label &anyd. = “Diagnosis” &var1.= “APSD Score”;
+
+run;
+
+Title1 “Figure 3. Comparative Histograms of CBCL Externalizing Scores” font=”roman”;
+
+*** Overlaid comparative histograms ****;
+
+proc sgplot data = &libn..abacab;
+
+title ‘Distribution of CBCL Externalizing Scores’;
+
+where &var2.^=. and &anyd.^=.;
+
+histogram &var2. / group=&anyd. scale=count binstart=30 binwidth=3 transparency=0.5 datalabel=count;
+
+yaxis grid ; xaxis grid;
+
+keylegend / location=inside position=topleft across=1;
+
+format &anyd. cd.;
+
+label &anyd. = “Diagnosis” &var2.=”CBCL Externalizing T Score”;
+
+run;
+
+title1;
+
+ods pdf close file=”/folders/myfolders/ROC_PARTY/CD_final.pdf”;
